@@ -18,11 +18,6 @@ const wss = new WebSocket.Server({ server });
 const PORT = process.env.PORT || 3001;
 
 const Gpio = require('onoff').Gpio;
-//const sense = new Gpio(17, 'in', 'both', {debounceTimeout: 500});
-//const sense1 = new Gpio(27, 'in', 'both', {debounceTimeout: 500});
-//const pump = new Gpio(22, 'high');
-
-//pump.writeSync(1);
 
 const config = [
   {
@@ -102,20 +97,19 @@ for (let i = 0; i < config.length; i += 1) {
 
 for (let i = 0; i < trigs.length; i += 1) {
   trigArray.push(setInterval(() => {
-    //let sensorIndex = sensArray.findIndex((item) => item.name === trigs[i].sensor);
     let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
     console.log('trigger', servoIndex);
-    if (valArray[trigs[i].sensor] && valArrayServ[trigs[i].servo] && !servTimeoutArray[trigs[i].servo]) {
+    if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null && (servTimeoutArray.length === 0 || !servTimeoutArray[trigs[i].servo])) {
       if (trigs[i].type === 'bigger' && valArray[trigs[i].sensor] > trigs[i].value) {
-        servInitArray[servoIndex].writeSync(0);
+        switchServo(servoIndex, 'on');
         servTimeoutArray[trigs[i].servo] = setTimeout(() => {
-          servInitArray[servoIndex].writeSync(1);
+        switchServo(servoIndex, 'off');
           servTimeoutArray[trigs[i].servo] = null;
         }, trigs[i].duration);
       } else if (trigs[i].type === 'lesser' && valArray[trigs[i].sensor] < trigs[i].value) {
-        servInitArray[servoIndex].writeSync(0);
+        switchServo(servoIndex, 'on');
         servTimeoutArray[trigs[i].servo] = setTimeout(() => {
-          servInitArray[servoIndex].writeSync(1);
+          switchServo(servoIndex, 'off');
           servTimeoutArray[trigs[i].servo] = null;
         }, trigs[i].duration);
       }
@@ -123,10 +117,24 @@ for (let i = 0; i < trigs.length; i += 1) {
   }, trigs[i].intv));
 }
 
+// FUNCTIONS
+
 function sendMessage() {
   eventEmitter.emit('send-message', valArray);
   console.log('send message', valArray);
   return;
+}
+
+function switchServo(servoIdx, cond) {
+  if (servInitArray && servInitArray[servoIdx] && servArray && servArray[servoIdx]) {
+    if (servArray[servoIdx].init === 'high') {
+      if (cond === 'on') servInitArray[servoIdx].writeSync(0);
+      else servInitArray[servoIdx].writeSync(1);
+    } else if (servArray[servoIdx].init === 'low') {
+      if (cond === 'on') servInitArray[servoIdx].writeSync(1);
+      else servInitArray[servoIdx].writeSync(0);
+    }
+  }
 }
 
 var readPoll = setInterval(() => {
@@ -152,6 +160,7 @@ var readPoll = setInterval(() => {
   messageServo = valArrayServ;
   console.log('message', JSON.stringify(messageSensor));
   console.log('messageServ', JSON.stringify(messageServo));
+  console.log('servtimeout', servTimeoutArray);
   //sendMessage();
 }, 3000);
 
@@ -166,32 +175,8 @@ app.get("/api", (req, res) => {
 server.listen(PORT, () => {
   console.log(`Server listening on ${PORT}`);
   console.log(servInitArray);
-  //servInitArray[0].writeSync(0);
-  //servInitArray[0].writeSync(1);
 });
 
-//var wsIntv = null;
-
-//app.ws('/echo', (ws, req) => {
-
-    //ws.on('close', () => {
-        //console.log('WebSocket was closed')
-    //})
-
-    //ws.on('open', () => {
-        //console.log('Websocket open');
-    //})
-    
-    //eventEmitter.on('send-message', (msg) => ws.send(JSON.stringify(msg)));
-    ////wsIntv = setInterval(() => {    
-      
-      ////if (message) {
-        ////ws.send(JSON.stringify(valArray));
-        ////console.log('ws message:', JSON.stringify(valArray));
-      ////};
-      
-    ////}, 3000);
-//})
 function noop() {};
 
 function heartbeat() {
