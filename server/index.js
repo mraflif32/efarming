@@ -123,8 +123,6 @@ for (let i = 0; i < trigs.length; i += 1) {
   }, trigs[i].intv));
 }
 
-console.log('length ', sensArray.length);
-
 function sendMessage() {
   eventEmitter.emit('send-message', valArray);
   console.log('send message', valArray);
