@@ -19,6 +19,28 @@ const PORT = process.env.PORT || 3001;
 
 const Gpio = require('onoff').Gpio;
 
+var mysql = require('mysql');
+
+let connection = mysql.createConnection({
+    host: 'localhost',
+    user: 'user',
+    password: '1234',
+    database: 'pidb'
+});
+
+connection.connect(function(err) {
+  if (err) {
+    return console.error('error: ' + err.message);
+  }
+
+  console.log('Connected to the MySQL server.');
+  //let q = "INSERT INTO sensor_log (name, value) VALUES ('sensor1', 0)";
+  //connection.query(q, function (err, result) {
+    //if (err) throw err;
+    //console.log('record inserted');
+  //});
+});
+
 const config = [
   {
     name: 'sensor1',
@@ -164,6 +186,26 @@ var readPoll = setInterval(() => {
   //sendMessage();
 }, 3000);
 
+var sqlPoll = setInterval(() => {
+  console.log('sqopoll val array', Object.entries(valArray));
+  let tempArr = valArray;
+  for (const [key, value] of Object.entries(tempArr)) {
+    console.log('sql poll', key, value);
+    if (value == null || key == null) continue;
+    console.log('continued');
+    try {
+      let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
+      connection.query(q, [key, value], function (err, result) {
+        if (err) throw err;
+        console.log('record inserted');
+      });
+    }
+    catch (err) {
+      console.log('error insert');
+    }
+  };
+}, 3000);
+
 //setTimeout(() => {
   //servInitArray[0].writeSync(0);
 //}, 10000);
@@ -218,7 +260,15 @@ wss.on('close', function close() {
 
 process.on('SIGINT', _ => {
   clearInterval(readPoll);
+  clearInterval(sqlPoll);
   clearInterval(interval);
+  
+  connection.end(function(err) {
+    if (err) {
+      return console.log('error:' + err.message);
+    }
+    console.log('Close the database connection.');
+  });
   
   for (let i = 0; i < trigArray.length; i++) {
     clearInterval(trigArray[i]);
