@@ -19,94 +19,9 @@ const PORT = process.env.PORT || 3001;
 
 const Gpio = require('onoff').Gpio;
 
-var mysql = require('mysql');
-
-let connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'user',
-    password: '1234',
-    database: 'pidb'
-});
+var mysql = require('mysql2/promise');
 
 var config = [];
-
-connection.connect(function(err) {
-  if (err) {
-    return console.error('error: ' + err.message);
-  }
-
-  console.log('Connected to the MySQL server.');
-  let q = "SELECT * FROM sensors";
-  try {
-    connection.query(q, function (err1, result) {
-      if (err1) throw err1;
-      console.log('sensor sql', result);
-      if (result) {
-        result.forEach((item) => {
-          config.push({
-            name: item.name,
-            mode: 'input',
-            pin: item.pin,
-          });
-        })
-      }
-    });
-  } catch (err1) {
-    console.log('error select', err1);
-  }
-  
-  q = "SELECT * FROM servos";
-  try {
-    connection.query(q, function (err1, result) {
-      if (err1) throw err1;
-      console.log('servos sql', result);
-      if (result) {
-        result.forEach((item) => {
-          config.push({
-            name: item.name,
-            mode: 'output',
-            pin: item.pin,
-            init: item.init ? 'high' : 'low',
-          });
-        })
-      }
-    });
-  } catch (err1) {
-    console.log('error select', err1);
-  }
-
-  console.log('qselect', config);
-});
-
-//~ const config = [
-  //~ {
-    //~ name: 'sensor1',
-    //~ mode: 'input',
-    //~ pin: 17,
-  //~ },
-  //~ //{
-    //~ //name: 'sensor2',
-    //~ //mode: 'input',
-    //~ //pin: 27,
-  //~ //},
-  //~ {
-    //~ name: 'pump1',
-    //~ mode: 'output',
-    //~ pin: 22,
-    //~ init: 'high',
-  //~ },
-//~ ];
-
-const trigs = [
-  {
-    sensor: 'sensor1',
-    servo: 'pump1',
-    type: 'lesser',
-    value: 1,
-    intv: 5000,
-    duration: 10000,
-  },
-];
 
 // INITIATING VARS
 
@@ -128,53 +43,106 @@ var valArrayServ = {};
 var events = require('events');
 var eventEmitter = new events.EventEmitter();
 
+const trigs = [
+  {
+    sensor: 'sensor1',
+    servo: 'pump1',
+    type: 'lesser',
+    value: 1,
+    intv: 5000,
+    duration: 10000,
+  },
+];
 
-// READ CONFIG, INIT SENSOR SERVO TRIGGER
+var connection;
 
-for (let i = 0; i < config.length; i += 1) {
-  console.log('comp', config[i]);
-  if (config[i].mode === 'input') {
-    sensArray.push({
-      name: config[i].name,
-      pin: config[i].pin,
+// MAIN FUNCTION
+
+async function main() {
+  connection = await mysql.createConnection({
+      host: 'localhost',
+      user: 'user',
+      password: '1234',
+      database: 'pidb'
+  });
+  
+  const [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
+  const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+  
+  //~ console.log('sensors', sensors);
+  //~ console.log('servos', servos);
+  
+  sensors.forEach((item) => {
+    console.log('sensor item', item);
+    config.push({
+      name: item.name,
+      mode: 'input',
+      pin: item.pin,
     });
-    sensInitArray.push(new Gpio(config[i].pin, 'in', 'both', {debounceTimeout: 500}));
-    valArray[config[i].name] = null;
-  } else if (config[i].mode === 'output') {
-    servArray.push({
-      name: config[i].name,
-      pin: config[i].pin,
-      init: config[i].init,
+  });
+  
+  servos.forEach((item) => {
+    console.log('servo item', item);
+    config.push({
+      name: item.name,
+      mode: 'output',
+      pin: item.pin,
+      init: item.init ? 'high' : 'low',
     });
-    if (config[i].init === 'high') {
-      servInitArray.push(new Gpio(config[i].pin, 'high'));
-    } else {
-      servInitArray.push(new Gpio(config[i].pin, 'out'));
+  });
+
+
+  // READ CONFIG, INIT SENSOR SERVO TRIGGER
+  
+  
+  for (let i = 0; i < config.length; i += 1) {
+    console.log('comp', config[i]);
+    if (config[i].mode === 'input') {
+      sensArray.push({
+        name: config[i].name,
+        pin: config[i].pin,
+      });
+      sensInitArray.push(new Gpio(config[i].pin, 'in', 'both', {debounceTimeout: 500}));
+      valArray[config[i].name] = null;
+    } else if (config[i].mode === 'output') {
+      servArray.push({
+        name: config[i].name,
+        pin: config[i].pin,
+        init: config[i].init,
+      });
+      if (config[i].init === 'high') {
+        servInitArray.push(new Gpio(config[i].pin, 'high'));
+      } else {
+        servInitArray.push(new Gpio(config[i].pin, 'out'));
+      };
     };
-  };
-}
-
-for (let i = 0; i < trigs.length; i += 1) {
-  trigArray.push(setInterval(() => {
-    let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
-    console.log('trigger', servoIndex);
-    if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null && (servTimeoutArray.length === 0 || !servTimeoutArray[trigs[i].servo])) {
-      if (trigs[i].type === 'bigger' && valArray[trigs[i].sensor] > trigs[i].value) {
-        switchServo(servoIndex, 'on');
-        servTimeoutArray[trigs[i].servo] = setTimeout(() => {
-        switchServo(servoIndex, 'off');
-          servTimeoutArray[trigs[i].servo] = null;
-        }, trigs[i].duration);
-      } else if (trigs[i].type === 'lesser' && valArray[trigs[i].sensor] < trigs[i].value) {
-        switchServo(servoIndex, 'on');
-        servTimeoutArray[trigs[i].servo] = setTimeout(() => {
+  }
+  
+  for (let i = 0; i < trigs.length; i += 1) {
+    trigArray.push(setInterval(() => {
+      let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
+      console.log('trigger', servoIndex);
+      if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null && (servTimeoutArray.length === 0 || !servTimeoutArray[trigs[i].servo])) {
+        if (trigs[i].type === 'bigger' && valArray[trigs[i].sensor] > trigs[i].value) {
+          switchServo(servoIndex, 'on');
+          servTimeoutArray[trigs[i].servo] = setTimeout(() => {
           switchServo(servoIndex, 'off');
-          servTimeoutArray[trigs[i].servo] = null;
-        }, trigs[i].duration);
+            servTimeoutArray[trigs[i].servo] = null;
+          }, trigs[i].duration);
+        } else if (trigs[i].type === 'lesser' && valArray[trigs[i].sensor] < trigs[i].value) {
+          switchServo(servoIndex, 'on');
+          servTimeoutArray[trigs[i].servo] = setTimeout(() => {
+            switchServo(servoIndex, 'off');
+            servTimeoutArray[trigs[i].servo] = null;
+          }, trigs[i].duration);
+        }
       }
-    }
-  }, trigs[i].intv));
-}
+    }, trigs[i].intv));
+  }
+  
+};
+
+main();
 
 // FUNCTIONS
 
@@ -227,19 +195,19 @@ var sqlPoll = setInterval(() => {
   console.log('sqopoll val array', Object.entries(valArray));
   let tempArr = valArray;
   for (const [key, value] of Object.entries(tempArr)) {
-    //~ console.log('sql poll', key, value);
-    //~ if (value == null || key == null) continue;
-    //~ console.log('continued');
-    //~ try {
-      //~ let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
-      //~ connection.query(q, [key, value], function (err, result) {
-        //~ if (err) throw err;
-        //~ console.log('record inserted');
-      //~ });
-    //~ }
-    //~ catch (err) {
-      //~ console.log('error insert');
-    //~ }
+    console.log('sql poll', key, value);
+    if (value == null || key == null) continue;
+    console.log('continued');
+    try {
+      let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
+      connection.query(q, [key, value], function (err, result) {
+        if (err) throw err;
+        console.log('record inserted');
+      });
+    }
+    catch (err) {
+      console.log('error insert');
+    }
   };
 }, 3000);
 
