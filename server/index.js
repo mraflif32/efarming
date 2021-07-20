@@ -28,37 +28,74 @@ let connection = mysql.createConnection({
     database: 'pidb'
 });
 
+var config = [];
+
 connection.connect(function(err) {
   if (err) {
     return console.error('error: ' + err.message);
   }
 
   console.log('Connected to the MySQL server.');
-  //let q = "INSERT INTO sensor_log (name, value) VALUES ('sensor1', 0)";
-  //connection.query(q, function (err, result) {
-    //if (err) throw err;
-    //console.log('record inserted');
-  //});
+  let q = "SELECT * FROM sensors";
+  try {
+    connection.query(q, function (err1, result) {
+      if (err1) throw err1;
+      console.log('sensor sql', result);
+      if (result) {
+        result.forEach((item) => {
+          config.push({
+            name: item.name,
+            mode: 'input',
+            pin: item.pin,
+          });
+        })
+      }
+    });
+  } catch (err1) {
+    console.log('error select', err1);
+  }
+  
+  q = "SELECT * FROM servos";
+  try {
+    connection.query(q, function (err1, result) {
+      if (err1) throw err1;
+      console.log('servos sql', result);
+      if (result) {
+        result.forEach((item) => {
+          config.push({
+            name: item.name,
+            mode: 'output',
+            pin: item.pin,
+            init: item.init ? 'high' : 'low',
+          });
+        })
+      }
+    });
+  } catch (err1) {
+    console.log('error select', err1);
+  }
+
+  console.log('qselect', config);
 });
 
-const config = [
-  {
-    name: 'sensor1',
-    mode: 'input',
-    pin: 17,
-  },
-  //{
-    //name: 'sensor2',
-    //mode: 'input',
-    //pin: 27,
-  //},
-  {
-    name: 'pump1',
-    mode: 'output',
-    pin: 22,
-    init: 'high',
-  },
-];
+//~ const config = [
+  //~ {
+    //~ name: 'sensor1',
+    //~ mode: 'input',
+    //~ pin: 17,
+  //~ },
+  //~ //{
+    //~ //name: 'sensor2',
+    //~ //mode: 'input',
+    //~ //pin: 27,
+  //~ //},
+  //~ {
+    //~ name: 'pump1',
+    //~ mode: 'output',
+    //~ pin: 22,
+    //~ init: 'high',
+  //~ },
+//~ ];
 
 const trigs = [
   {
@@ -190,19 +227,19 @@ var sqlPoll = setInterval(() => {
   console.log('sqopoll val array', Object.entries(valArray));
   let tempArr = valArray;
   for (const [key, value] of Object.entries(tempArr)) {
-    console.log('sql poll', key, value);
-    if (value == null || key == null) continue;
-    console.log('continued');
-    try {
-      let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
-      connection.query(q, [key, value], function (err, result) {
-        if (err) throw err;
-        console.log('record inserted');
-      });
-    }
-    catch (err) {
-      console.log('error insert');
-    }
+    //~ console.log('sql poll', key, value);
+    //~ if (value == null || key == null) continue;
+    //~ console.log('continued');
+    //~ try {
+      //~ let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
+      //~ connection.query(q, [key, value], function (err, result) {
+        //~ if (err) throw err;
+        //~ console.log('record inserted');
+      //~ });
+    //~ }
+    //~ catch (err) {
+      //~ console.log('error insert');
+    //~ }
   };
 }, 3000);
 
