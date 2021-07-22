@@ -10,6 +10,12 @@ const key = fs.readFileSync('./key.pem');
 const cert = fs.readFileSync('./cert.pem');
 
 const app = express();
+const bodyParser = require("body-parser");
+const router = express.Router();
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
 const server = http.createServer({key: key, cert: cert }, app);
 
 
@@ -20,8 +26,6 @@ const PORT = process.env.PORT || 3001;
 const Gpio = require('onoff').Gpio;
 
 var mysql = require('mysql2/promise');
-
-var config = [];
 
 // INITIATING VARS
 
@@ -43,18 +47,26 @@ var valArrayServ = {};
 var events = require('events');
 var eventEmitter = new events.EventEmitter();
 
-const trigs = [
-  {
-    sensor: 'sensor1',
-    servo: 'pump1',
-    type: 'lesser',
-    value: 1,
-    intv: 5000,
-    duration: 10000,
-  },
-];
+var config = [];
+var trigs = [];
+
+//~ const trigs = [
+  //~ {
+    //~ sensor: 'sensor1',
+    //~ servo: 'pump1',
+    //~ type: 'lesser',
+    //~ value: 1,
+    //~ intv: 5000,
+    //~ duration: 10000,
+  //~ },
+//~ ];
 
 var connection;
+
+// LOG VARs
+
+var pollLog = false;
+var shouldSqlPoll = false;
 
 // MAIN FUNCTION
 
@@ -68,6 +80,7 @@ async function main() {
   
   const [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
   const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+  const [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
   
   //~ console.log('sensors', sensors);
   //~ console.log('servos', servos);
@@ -89,6 +102,11 @@ async function main() {
       pin: item.pin,
       init: item.init ? 'high' : 'low',
     });
+  });
+  
+  triggers.forEach((item) => {
+    console.log('trigger item', item);
+    trigs.push(item);
   });
 
 
@@ -121,7 +139,9 @@ async function main() {
   for (let i = 0; i < trigs.length; i += 1) {
     trigArray.push(setInterval(() => {
       let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
-      console.log('trigger', servoIndex);
+      if (pollLog) {
+        console.log('trigger', servoIndex);
+      };
       if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null && (servTimeoutArray.length === 0 || !servTimeoutArray[trigs[i].servo])) {
         if (trigs[i].type === 'bigger' && valArray[trigs[i].sensor] > trigs[i].value) {
           switchServo(servoIndex, 'on');
@@ -185,29 +205,35 @@ var readPoll = setInterval(() => {
   };
   messageSensor = valArray;
   messageServo = valArrayServ;
-  console.log('message', JSON.stringify(messageSensor));
-  console.log('messageServ', JSON.stringify(messageServo));
-  console.log('servtimeout', servTimeoutArray);
+  if (pollLog) {
+    console.log('message', JSON.stringify(messageSensor));
+    console.log('messageServ', JSON.stringify(messageServo));
+    console.log('servtimeout', servTimeoutArray);
+  };
   //sendMessage();
 }, 3000);
 
 var sqlPoll = setInterval(() => {
-  console.log('sqopoll val array', Object.entries(valArray));
-  let tempArr = valArray;
-  for (const [key, value] of Object.entries(tempArr)) {
-    console.log('sql poll', key, value);
-    if (value == null || key == null) continue;
-    console.log('continued');
-    try {
-      let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
-      connection.query(q, [key, value], function (err, result) {
-        if (err) throw err;
-        console.log('record inserted');
-      });
-    }
-    catch (err) {
-      console.log('error insert');
-    }
+  if (pollLog) {
+    console.log('sqopoll val array', Object.entries(valArray));
+  };
+  if (shouldSqlPoll) {
+    let tempArr = valArray;
+    for (const [key, value] of Object.entries(tempArr)) {
+      //~ console.log('sql poll', key, value);
+      if (value == null || key == null) continue;
+      //~ console.log('continued');
+      try {
+        let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
+        connection.query(q, [key, value], function (err, result) {
+          if (err) throw err;
+          //~ console.log('record inserted');
+        });
+      }
+      catch (err) {
+        console.log('error insert');
+      }
+    };
   };
 }, 3000);
 
@@ -217,6 +243,47 @@ var sqlPoll = setInterval(() => {
 
 app.get("/api", (req, res) => {
   res.json({ message: "Hello from server!" });
+});
+
+app.post("/sensor", (req, res) => {
+  //~ console.log('reqqq', req);
+  //~ try {
+    
+      //~ if (err) throw err;
+      //~ console.log('sensor inserted');
+      //~ res.status(200).send('Success');
+    //~ });
+  //~ }
+  //~ catch (err) {
+    //~ console.log('error sensor insert');
+    //~ res.status(500).send(err);
+  //~ }
+  //~ finally {
+    //~ res.end();
+  //~ }
+  let q = "INSERT INTO sensors (name, type, pin) VALUES (?, ?, ?)";
+  connection.execute(q, [req.body.name, req.body.type, req.body.pin]).then(function (err, result) {
+    console.log('sensor inserted');
+    res.send('Success');
+  }).catch(err => {
+    console.log('error sensor insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.post("/servo", (req, res) => {
+  let q = "INSERT INTO servos (name, pin, init) VALUES (?, ?, ?)";
+  connection.execute(q, [req.body.name, req.body.pin, req.body.init]).then(function (error, result) {
+    console.log('servo inserted');
+    res.send('Success');
+  }).catch(err => {
+    console.log('error servo insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
 });
 
 server.listen(PORT, () => {
