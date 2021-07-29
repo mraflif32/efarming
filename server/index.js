@@ -65,7 +65,7 @@ var connection;
 
 // LOG VARs
 
-var pollLog = false;
+var pollLog = true;
 var shouldSqlPoll = false;
 
 // MAIN FUNCTION
@@ -246,21 +246,6 @@ app.get("/api", (req, res) => {
 });
 
 app.post("/sensor", (req, res) => {
-  //~ console.log('reqqq', req);
-  //~ try {
-    
-      //~ if (err) throw err;
-      //~ console.log('sensor inserted');
-      //~ res.status(200).send('Success');
-    //~ });
-  //~ }
-  //~ catch (err) {
-    //~ console.log('error sensor insert');
-    //~ res.status(500).send(err);
-  //~ }
-  //~ finally {
-    //~ res.end();
-  //~ }
   let q = "INSERT INTO sensors (name, type, pin) VALUES (?, ?, ?)";
   connection.execute(q, [req.body.name, req.body.type, req.body.pin]).then(function (err, result) {
     console.log('sensor inserted');
@@ -280,6 +265,19 @@ app.post("/servo", (req, res) => {
     res.send('Success');
   }).catch(err => {
     console.log('error servo insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.post("/trigger", (req, res) => {
+  let q = "INSERT INTO triggers (sensor, servo, type, value, intv, duration) VALUES (?, ?, ?, ?, ?, ?)";
+  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration]).then(function (error, result) {
+    console.log('trigger inserted');
+    res.send('Success');
+  }).catch(err => {
+    console.log('error trigger insert', err);
     res.status(500).send(err);
   }).finally(() => {
     res.end();
