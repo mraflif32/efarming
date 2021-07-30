@@ -78,9 +78,71 @@ async function main() {
       database: 'pidb'
   });
   
-  const [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
-  const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
-  const [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
+  //~ const [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
+  //~ const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+  //~ const [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
+  
+  const sensors = [
+    {
+      name: 'sensor',
+      type: 'moist',
+      pin: 17,
+    },
+    {
+      name: 'sensor',
+      type: 'moist',
+      pin: 27,
+    },
+    //~ {
+      //~ name: 'sensor',
+      //~ type: 'moist',
+      //~ pin: 17,
+    //~ },
+    //~ {
+      //~ name: 'sensor',
+      //~ type: 'moist',
+      //~ pin: 17,
+    //~ },
+    //~ {
+      //~ name: 'sensor',
+      //~ type: 'moist',
+      //~ pin: 17,
+    //~ },
+  ];
+  
+  const servos = [
+    {
+      name: 'pump1',
+      init: 1,
+      pin: 22,
+    },
+    //~ {
+      //~ name: 'pump2',
+      //~ init: 1,
+      //~ pin: 22,
+    //~ },
+    //~ {
+      //~ name: 'pump3',
+      //~ init: 1,
+      //~ pin: 22,
+    //~ },
+    //~ {
+      //~ name: 'pump4',
+      //~ init: 1,
+      //~ pin: 22,
+    //~ },
+  ];
+  
+  const triggers = [
+    {
+      sensor: 'sensor1',
+      servo: 'pump1',
+      type: 'lesser',
+      value: 1,
+      intv: 5000,
+      duration: 10000,
+    },
+  ];
   
   //~ console.log('sensors', sensors);
   //~ console.log('servos', servos);
@@ -116,12 +178,13 @@ async function main() {
   for (let i = 0; i < config.length; i += 1) {
     console.log('comp', config[i]);
     if (config[i].mode === 'input') {
+      let confName = `${config[i].name}${i + 1}`;
       sensArray.push({
-        name: config[i].name,
+        name: confName,
         pin: config[i].pin,
       });
       sensInitArray.push(new Gpio(config[i].pin, 'in', 'both', {debounceTimeout: 500}));
-      valArray[config[i].name] = null;
+      valArray[confName] = null;
     } else if (config[i].mode === 'output') {
       servArray.push({
         name: config[i].name,
@@ -185,6 +248,7 @@ function switchServo(servoIdx, cond) {
 }
 
 var readPoll = setInterval(() => {
+  console.time('Execution Time');
   for (let i = 0; i < sensArray.length; i++) {
     sensInitArray[i].read((err, value) => {
       if (err) {
@@ -205,6 +269,7 @@ var readPoll = setInterval(() => {
   };
   messageSensor = valArray;
   messageServo = valArrayServ;
+  console.timeEnd('Execution Time');
   if (pollLog) {
     console.log('message', JSON.stringify(messageSensor));
     console.log('messageServ', JSON.stringify(messageServo));
