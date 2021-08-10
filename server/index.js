@@ -47,6 +47,9 @@ var valArrayServ = {};
 var events = require('events');
 var eventEmitter = new events.EventEmitter();
 
+var sensors, servos, triggers;
+var sensorFields, servoFields, triggerFields;
+
 var config = [];
 var trigs = [];
 
@@ -65,8 +68,14 @@ var connection;
 
 // LOG VARs
 
-var pollLog = true;
+var pollLog = false;
 var shouldSqlPoll = false;
+var messageLog = false;
+
+// CONFIG VARs
+
+var shouldSetup = false;
+var shouldReadPoll = false;
 
 // MAIN FUNCTION
 
@@ -78,12 +87,16 @@ async function main() {
       database: 'pidb'
   });
   
-  const [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
-  const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
-  const [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
+  await getDevices();
   
-  //~ console.log('sensors', sensors);
-  //~ console.log('servos', servos);
+  if (shouldSetup) setup();
+  
+};
+
+async function getDevices() {
+  [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
+  [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+  [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
   
   sensors.forEach((item) => {
     console.log('sensor item', item);
@@ -108,8 +121,9 @@ async function main() {
     console.log('trigger item', item);
     trigs.push(item);
   });
+}
 
-
+function setup() {
   // READ CONFIG, INIT SENSOR SERVO TRIGGER
   
   
@@ -159,8 +173,7 @@ async function main() {
       }
     }, trigs[i].intv));
   }
-  
-};
+}
 
 main();
 
@@ -185,31 +198,33 @@ function switchServo(servoIdx, cond) {
 }
 
 var readPoll = setInterval(() => {
-  for (let i = 0; i < sensArray.length; i++) {
-    sensInitArray[i].read((err, value) => {
-      if (err) {
-        throw err;
-      }
-      
-      valArray[sensArray[i].name] = value;
-    });
-  };
-  for (let i = 0; i < servArray.length; i++) {
-    servInitArray[i].read((err, value) => {
-      if (err) {
-        throw err;
-      }
-      
-      valArrayServ[servArray[i].name] = value;
-    });
-  };
-  messageSensor = valArray;
-  messageServo = valArrayServ;
-  if (pollLog) {
-    console.log('message', JSON.stringify(messageSensor));
-    console.log('messageServ', JSON.stringify(messageServo));
-    console.log('servtimeout', servTimeoutArray);
-  };
+  if (shouldReadPoll) {
+    for (let i = 0; i < sensArray.length; i++) {
+      sensInitArray[i].read((err, value) => {
+        if (err) {
+          throw err;
+        }
+        
+        valArray[sensArray[i].name] = value;
+      });
+    };
+    for (let i = 0; i < servArray.length; i++) {
+      servInitArray[i].read((err, value) => {
+        if (err) {
+          throw err;
+        }
+        
+        valArrayServ[servArray[i].name] = value;
+      });
+    };
+    messageSensor = valArray;
+    messageServo = valArrayServ;
+    if (pollLog) {
+      console.log('message', JSON.stringify(messageSensor));
+      console.log('messageServ', JSON.stringify(messageServo));
+      console.log('servtimeout', servTimeoutArray);
+    };
+  }
   //sendMessage();
 }, 3000);
 
@@ -247,11 +262,38 @@ app.get("/api", (req, res) => {
 
 app.post("/sensor", (req, res) => {
   let q = "INSERT INTO sensors (name, type, pin) VALUES (?, ?, ?)";
-  connection.execute(q, [req.body.name, req.body.type, req.body.pin]).then(function (err, result) {
+  connection.execute(q, [req.body.name, req.body.type, req.body.pin]).then(function (result) {
     console.log('sensor inserted');
-    res.send('Success');
+    res.send(result);
   }).catch(err => {
     console.log('error sensor insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.put("/sensor/:id", (req, res) => {
+  let q = "UPDATE sensors SET name=?, type=?, pin=? WHERE id=?";
+  connection.execute(q, [req.body.name, req.body.type, req.body.pin, req.params.id]).then(function (result) {
+    console.log('sensor updated');
+    res.send(result);
+  }).catch(err => {
+    console.log('error sensor update', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.delete("/sensor/:id", (req, res) => {
+  console.log('delete');
+  let q = "DELETE from sensors WHERE id=?";
+  connection.execute(q, [req.params.id]).then(function (result) {
+    console.log('sensor deleted');
+    res.send(result);
+  }).catch(err => {
+    console.log('error sensor delete', err);
     res.status(500).send(err);
   }).finally(() => {
     res.end();
@@ -265,6 +307,33 @@ app.post("/servo", (req, res) => {
     res.send('Success');
   }).catch(err => {
     console.log('error servo insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.put("/servo/:id", (req, res) => {
+  let q = "UPDATE servos SET name=?, pin=?, init=? WHERE id=?";
+  connection.execute(q, [req.body.name, req.body.pin, req.body.init, req.params.id]).then(function (result) {
+    console.log('servo updated');
+    res.send(result);
+  }).catch(err => {
+    console.log('error servo update', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.delete("/servo/:id", (req, res) => {
+  console.log('delete');
+  let q = "DELETE from servos WHERE id=?";
+  connection.execute(q, [req.params.id]).then(function (result) {
+    console.log('servo deleted');
+    res.send(result);
+  }).catch(err => {
+    console.log('error servo delete', err);
     res.status(500).send(err);
   }).finally(() => {
     res.end();
@@ -292,13 +361,13 @@ server.listen(PORT, () => {
 function noop() {};
 
 function heartbeat() {
-  console.log('heartbeat');
+  if (messageLog) console.log('heartbeat');
   this.isAlive = true;
 };
 
 wss.on('connection', function connection(ws) {
   ws.on('message', function incoming(msg) {
-    console.log('received: %s', msg);
+    if (messageLog) console.log('received: %s', msg);
     if (msg === 'sensor') {
       ws.send(JSON.stringify(messageSensor));
     } else if (msg === 'servo') {
@@ -307,7 +376,7 @@ wss.on('connection', function connection(ws) {
   });
   //eventEmitter.on('send-message', (msg) => ws.send(JSON.stringify(msg)));
   //ws.send('something');
-  console.log('wss connection');
+  //~ console.log('wss connection');
   ws.isAlive = true;
   ws.on('pong', heartbeat);
   ws.on('close', () => console.log('wson close'));
