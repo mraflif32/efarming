@@ -302,9 +302,9 @@ app.delete("/sensor/:id", (req, res) => {
 
 app.post("/servo", (req, res) => {
   let q = "INSERT INTO servos (name, pin, init) VALUES (?, ?, ?)";
-  connection.execute(q, [req.body.name, req.body.pin, req.body.init]).then(function (error, result) {
+  connection.execute(q, [req.body.name, req.body.pin, req.body.init]).then(function (result) {
     console.log('servo inserted');
-    res.send('Success');
+    res.send(result);
   }).catch(err => {
     console.log('error servo insert', err);
     res.status(500).send(err);
@@ -327,7 +327,6 @@ app.put("/servo/:id", (req, res) => {
 });
 
 app.delete("/servo/:id", (req, res) => {
-  console.log('delete');
   let q = "DELETE from servos WHERE id=?";
   connection.execute(q, [req.params.id]).then(function (result) {
     console.log('servo deleted');
@@ -347,6 +346,32 @@ app.post("/trigger", (req, res) => {
     res.send('Success');
   }).catch(err => {
     console.log('error trigger insert', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.put("/trigger/:id", (req, res) => {
+  let q = "UPDATE triggers SET sensor=?, servo=?, type=?, value=?, intv=?, duration=? WHERE id=?";
+  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration, req.params.id]).then(function (result) {
+    console.log('trigger updated');
+    res.send(result);
+  }).catch(err => {
+    console.log('error trigger update', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.delete("/trigger/:id", (req, res) => {
+  let q = "DELETE from triggers WHERE id=?";
+  connection.execute(q, [req.params.id]).then(function (result) {
+    console.log('triger deleted');
+    res.send(result);
+  }).catch(err => {
+    console.log('error trigger delete', err);
     res.status(500).send(err);
   }).finally(() => {
     res.end();
