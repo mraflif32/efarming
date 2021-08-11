@@ -13,8 +13,14 @@ const app = express();
 const bodyParser = require("body-parser");
 const router = express.Router();
 
+const cors = require('cors');
+
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+app.use(cors({
+    origin: '*'
+}));
 
 const server = http.createServer({key: key, cert: cert }, app);
 
@@ -93,10 +99,25 @@ async function main() {
   
 };
 
-async function getDevices() {
+async function getSensors() {
   [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
+}  
+
+async function getServos() {
   [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+}  
+
+async function getTriggers() {
   [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
+}  
+
+async function getDevices() {
+  //~ [sensors, sensorFields] = await connection.execute('SELECT * FROM sensors');
+  //~ [servos, servoFields] = await connection.execute('SELECT * FROM servos');
+  //~ [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
+  await getSensors();
+  await getServos();
+  await getTriggers();
   
   sensors.forEach((item) => {
     console.log('sensor item', item);
@@ -260,10 +281,35 @@ app.get("/api", (req, res) => {
   res.json({ message: "Hello from server!" });
 });
 
+app.get("/sensor", (req, res) => {
+  res.send(sensors);
+  res.end();
+});
+
+app.get("/servo", (req, res) => {
+  res.send(servos);
+  res.end();
+});
+
+app.get("/trigger", (req, res) => {
+  res.send(triggers);
+  res.end();
+});
+
+app.get("/all", (req, res) => {
+  res.send({
+    sensors: sensors,
+    servos: servos,
+    triggers: triggers,
+  });
+  res.end();
+});
+
 app.post("/sensor", (req, res) => {
   let q = "INSERT INTO sensors (name, type, pin) VALUES (?, ?, ?)";
   connection.execute(q, [req.body.name, req.body.type, req.body.pin]).then(function (result) {
     console.log('sensor inserted');
+    getSensors();
     res.send(result);
   }).catch(err => {
     console.log('error sensor insert', err);
@@ -277,6 +323,7 @@ app.put("/sensor/:id", (req, res) => {
   let q = "UPDATE sensors SET name=?, type=?, pin=? WHERE id=?";
   connection.execute(q, [req.body.name, req.body.type, req.body.pin, req.params.id]).then(function (result) {
     console.log('sensor updated');
+    getSensors();
     res.send(result);
   }).catch(err => {
     console.log('error sensor update', err);
@@ -291,6 +338,7 @@ app.delete("/sensor/:id", (req, res) => {
   let q = "DELETE from sensors WHERE id=?";
   connection.execute(q, [req.params.id]).then(function (result) {
     console.log('sensor deleted');
+    getSensors();
     res.send(result);
   }).catch(err => {
     console.log('error sensor delete', err);
@@ -304,6 +352,7 @@ app.post("/servo", (req, res) => {
   let q = "INSERT INTO servos (name, pin, init) VALUES (?, ?, ?)";
   connection.execute(q, [req.body.name, req.body.pin, req.body.init]).then(function (result) {
     console.log('servo inserted');
+    getServos();
     res.send(result);
   }).catch(err => {
     console.log('error servo insert', err);
@@ -317,6 +366,7 @@ app.put("/servo/:id", (req, res) => {
   let q = "UPDATE servos SET name=?, pin=?, init=? WHERE id=?";
   connection.execute(q, [req.body.name, req.body.pin, req.body.init, req.params.id]).then(function (result) {
     console.log('servo updated');
+    getServos();
     res.send(result);
   }).catch(err => {
     console.log('error servo update', err);
@@ -330,6 +380,7 @@ app.delete("/servo/:id", (req, res) => {
   let q = "DELETE from servos WHERE id=?";
   connection.execute(q, [req.params.id]).then(function (result) {
     console.log('servo deleted');
+    getServos();
     res.send(result);
   }).catch(err => {
     console.log('error servo delete', err);
@@ -343,6 +394,7 @@ app.post("/trigger", (req, res) => {
   let q = "INSERT INTO triggers (sensor, servo, type, value, intv, duration) VALUES (?, ?, ?, ?, ?, ?)";
   connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration]).then(function (error, result) {
     console.log('trigger inserted');
+    getTriggers();
     res.send('Success');
   }).catch(err => {
     console.log('error trigger insert', err);
@@ -356,6 +408,7 @@ app.put("/trigger/:id", (req, res) => {
   let q = "UPDATE triggers SET sensor=?, servo=?, type=?, value=?, intv=?, duration=? WHERE id=?";
   connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration, req.params.id]).then(function (result) {
     console.log('trigger updated');
+    getTriggers();
     res.send(result);
   }).catch(err => {
     console.log('error trigger update', err);
@@ -369,6 +422,7 @@ app.delete("/trigger/:id", (req, res) => {
   let q = "DELETE from triggers WHERE id=?";
   connection.execute(q, [req.params.id]).then(function (result) {
     console.log('triger deleted');
+    getTriggers();
     res.send(result);
   }).catch(err => {
     console.log('error trigger delete', err);
