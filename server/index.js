@@ -59,6 +59,10 @@ var sensorFields, servoFields, triggerFields;
 var config = [];
 var trigs = [];
 
+var flags = {};
+var flagArray = [];
+var flagsTimeoutArray = [];
+
 //~ const trigs = [
   //~ {
     //~ sensor: 'sensor1',
@@ -74,14 +78,14 @@ var connection;
 
 // LOG VARs
 
-var pollLog = false;
+var pollLog = true;
 var shouldSqlPoll = false;
 var messageLog = false;
 
 // CONFIG VARs
 
-var shouldSetup = false;
-var shouldReadPoll = false;
+var shouldSetup = true;
+var shouldReadPoll = true;
 
 // MAIN FUNCTION
 
@@ -135,6 +139,7 @@ async function getDevices() {
       mode: 'output',
       pin: item.pin,
       init: item.init ? 'high' : 'low',
+      intv: item.intv,
     });
   });
   
@@ -171,29 +176,43 @@ function setup() {
     };
   }
   
+  servos.forEach((item) => {
+    flags[item.name] = [];
+    flagsTimeoutArray[item.name] = [];
+    flagArray.push(setInterval(() => {
+      console.log('flag interval', flags[item.name]);
+      let servoIndex = servArray.findIndex((serv) => serv.name === item.name);
+      if (Object.keys(flags[item.name]).length > 0 && Object.entries(flags[item.name]).findIndex(([key, value]) => value == false) == -1) {
+        console.log('flag on');
+        switchServo(servoIndex, 'on');
+      } else {
+        console.log('flag off');
+        switchServo(servoIndex, 'off');
+      };
+    }, item.intv));
+  })
+  
   for (let i = 0; i < trigs.length; i += 1) {
+    flags[trigs[i].servo][trigs[i].sensor] = false;
     trigArray.push(setInterval(() => {
       let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
       if (pollLog) {
         console.log('trigger', servoIndex);
       };
-      if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null && (servTimeoutArray.length === 0 || !servTimeoutArray[trigs[i].servo])) {
-        if (trigs[i].type === 'bigger' && valArray[trigs[i].sensor] > trigs[i].value) {
-          switchServo(servoIndex, 'on');
-          servTimeoutArray[trigs[i].servo] = setTimeout(() => {
-          switchServo(servoIndex, 'off');
-            servTimeoutArray[trigs[i].servo] = null;
-          }, trigs[i].duration);
-        } else if (trigs[i].type === 'lesser' && valArray[trigs[i].sensor] < trigs[i].value) {
-          switchServo(servoIndex, 'on');
-          servTimeoutArray[trigs[i].servo] = setTimeout(() => {
-            switchServo(servoIndex, 'off');
-            servTimeoutArray[trigs[i].servo] = null;
-          }, trigs[i].duration);
+      if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null) {
+        if (trigs[i].type === 'bigger') {
+          if (valArray[trigs[i].sensor] > trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
+          else flags[trigs[i].servo][trigs[i].sensor] = false;
+        } else if (trigs[i].type === 'lesser') {
+          if (valArray[trigs[i].sensor] < trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
+          else flags[trigs[i].servo][trigs[i].sensor] = false;
         }
       }
     }, trigs[i].intv));
   }
+  
+  console.log('setup flags', flags);
+  console.log('setup flagsTimeoutArray', flagsTimeoutArray);
 }
 
 main();
@@ -491,8 +510,16 @@ process.on('SIGINT', _ => {
   for (let i = 0; i < trigArray.length; i++) {
     clearInterval(trigArray[i]);
   };
+  for (let i = 0; i < flagArray.length; i++) {
+    clearInterval(flagArray[i]);
+  };
   for (const timeout in servTimeoutArray) {
     if (timeout) clearTimeout(timeout);
+  };
+  for (const timeoutArray in flagsTimeoutArray) {
+    if (timeoutArray.length > 0) {
+      for (const timeout in timeoutArray) clearTimeout(timeout);
+    }
   };
   for (let i = 0; i < sensInitArray.length; i++) {
     sensInitArray[i].unexport();
