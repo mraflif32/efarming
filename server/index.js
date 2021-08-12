@@ -69,8 +69,6 @@ var flagsTimeoutArray = [];
     //~ servo: 'pump1',
     //~ type: 'lesser',
     //~ value: 1,
-    //~ intv: 5000,
-    //~ duration: 10000,
   //~ },
 //~ ];
 
@@ -78,14 +76,14 @@ var connection;
 
 // LOG VARs
 
-var pollLog = true;
+var pollLog = false;
 var shouldSqlPoll = false;
 var messageLog = false;
 
 // CONFIG VARs
 
-var shouldSetup = true;
-var shouldReadPoll = true;
+var shouldSetup = false;
+var shouldReadPoll = false;
 
 // MAIN FUNCTION
 
@@ -152,7 +150,7 @@ async function getDevices() {
 function setup() {
   // READ CONFIG, INIT SENSOR SERVO TRIGGER
   
-  
+
   for (let i = 0; i < config.length; i += 1) {
     console.log('comp', config[i]);
     if (config[i].mode === 'input') {
@@ -211,8 +209,8 @@ function setup() {
     }, trigs[i].intv));
   }
   
-  console.log('setup flags', flags);
-  console.log('setup flagsTimeoutArray', flagsTimeoutArray);
+  //~ console.log('setup flags', flags);
+  //~ console.log('setup flagsTimeoutArray', flagsTimeoutArray);
 }
 
 main();
@@ -262,7 +260,7 @@ var readPoll = setInterval(() => {
     if (pollLog) {
       console.log('message', JSON.stringify(messageSensor));
       console.log('messageServ', JSON.stringify(messageServo));
-      console.log('servtimeout', servTimeoutArray);
+      //~ console.log('servtimeout', servTimeoutArray);
     };
   }
   //sendMessage();
@@ -368,8 +366,8 @@ app.delete("/sensor/:id", (req, res) => {
 });
 
 app.post("/servo", (req, res) => {
-  let q = "INSERT INTO servos (name, pin, init) VALUES (?, ?, ?)";
-  connection.execute(q, [req.body.name, req.body.pin, req.body.init]).then(function (result) {
+  let q = "INSERT INTO servos (name, pin, init, intv) VALUES (?, ?, ?, ?)";
+  connection.execute(q, [req.body.name, req.body.pin, req.body.init, req.body.intv]).then(function (result) {
     console.log('servo inserted');
     getServos();
     res.send(result);
@@ -382,8 +380,8 @@ app.post("/servo", (req, res) => {
 });
 
 app.put("/servo/:id", (req, res) => {
-  let q = "UPDATE servos SET name=?, pin=?, init=? WHERE id=?";
-  connection.execute(q, [req.body.name, req.body.pin, req.body.init, req.params.id]).then(function (result) {
+  let q = "UPDATE servos SET name=?, pin=?, init=?, intv=? WHERE id=?";
+  connection.execute(q, [req.body.name, req.body.pin, req.body.init, req.body.intv, req.params.id]).then(function (result) {
     console.log('servo updated');
     getServos();
     res.send(result);
@@ -410,8 +408,8 @@ app.delete("/servo/:id", (req, res) => {
 });
 
 app.post("/trigger", (req, res) => {
-  let q = "INSERT INTO triggers (sensor, servo, type, value, intv, duration) VALUES (?, ?, ?, ?, ?, ?)";
-  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration]).then(function (error, result) {
+  let q = "INSERT INTO triggers (sensor, servo, type, value, intv) VALUES (?, ?, ?, ?, ?)";
+  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv]).then(function (error, result) {
     console.log('trigger inserted');
     getTriggers();
     res.send('Success');
@@ -424,8 +422,8 @@ app.post("/trigger", (req, res) => {
 });
 
 app.put("/trigger/:id", (req, res) => {
-  let q = "UPDATE triggers SET sensor=?, servo=?, type=?, value=?, intv=?, duration=? WHERE id=?";
-  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.body.duration, req.params.id]).then(function (result) {
+  let q = "UPDATE triggers SET sensor=?, servo=?, type=?, value=?, intv=? WHERE id=?";
+  connection.execute(q, [req.body.sensor, req.body.servo, req.body.type, req.body.value, req.body.intv, req.params.id]).then(function (result) {
     console.log('trigger updated');
     getTriggers();
     res.send(result);
