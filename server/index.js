@@ -77,13 +77,14 @@ var connection;
 // LOG VARs
 
 var pollLog = false;
-var shouldSqlPoll = false;
 var messageLog = false;
+var flagLog = false;
 
 // CONFIG VARs
 
-var shouldSetup = false;
-var shouldReadPoll = false;
+var shouldSqlPoll = false;
+var shouldSetup = true;
+var shouldReadPoll = true;
 
 // MAIN FUNCTION
 
@@ -178,13 +179,13 @@ function setup() {
     flags[item.name] = [];
     flagsTimeoutArray[item.name] = [];
     flagArray.push(setInterval(() => {
-      console.log('flag interval', flags[item.name]);
+      if (flagLog) console.log('flag interval', flags[item.name]);
       let servoIndex = servArray.findIndex((serv) => serv.name === item.name);
       if (Object.keys(flags[item.name]).length > 0 && Object.entries(flags[item.name]).findIndex(([key, value]) => value == false) == -1) {
-        console.log('flag on');
+        if (flagLog) console.log('flag on');
         switchServo(servoIndex, 'on');
       } else {
-        console.log('flag off');
+        if (flagLog) console.log('flag off');
         switchServo(servoIndex, 'off');
       };
     }, item.intv));
@@ -350,6 +351,21 @@ app.put("/sensor/:id", (req, res) => {
   });
 });
 
+app.get("/sensor/:id", (req, res) => {
+  console.log('get history');
+  //~ let q = "SELECT name from sensors WHERE id=?";
+  let q = "SELECT sensor_log.name, value, time from (SELECT name FROM sensors WHERE id LIKE ?) C JOIN sensor_log ON C.name=sensor_log.name";
+  connection.execute(q, [req.params.id]).then(function (result) {
+    console.log('getted');
+    res.send(result);
+  }).catch(err => {
+    console.log('error sensor delete', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
 app.delete("/sensor/:id", (req, res) => {
   console.log('delete');
   let q = "DELETE from sensors WHERE id=?";
@@ -467,7 +483,9 @@ wss.on('connection', function connection(ws) {
     if (msg === 'sensor') {
       ws.send(JSON.stringify(messageSensor));
     } else if (msg === 'servo') {
-      ws.send(JSON.stringify(messageSensor));
+      ws.send(JSON.stringify(messageServo));
+    } else if (msg === 'all') {
+      ws.send(JSON.stringify({sensor: {...messageSensor},servo: {...messageServo}}));
     }
   });
   //eventEmitter.on('send-message', (msg) => ws.send(JSON.stringify(msg)));
