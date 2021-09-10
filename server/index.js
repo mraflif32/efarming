@@ -24,7 +24,6 @@ app.use(cors({
 
 const server = http.createServer({key: key, cert: cert }, app);
 
-
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3001;
@@ -35,44 +34,37 @@ var mysql = require('mysql2/promise');
 
 // INITIATING VARS
 
-var sensArray = [];
-var servArray = [];
+var sensArray;
+var servArray;
 
-var sensInitArray = [];
-var servInitArray = [];
+var sensInitArray;
+var servInitArray;
 
-var trigArray = [];
-var servTimeoutArray = [];
+var trigArray;
+var servTimeoutArray;
 
-var messageSensor = null;
-var messageServo = null;
+var messageSensor;
+var messageServo;
 
-var valArray = {};
-var valArrayServ = {};
-
-var events = require('events');
-var eventEmitter = new events.EventEmitter();
+var valArray;
+var valArrayServ;
 
 var sensors, servos, triggers;
 var sensorFields, servoFields, triggerFields;
 
-var config = [];
-var trigs = [];
+var config;
+var trigs;
 
-var flags = {};
-var flagArray = [];
-var flagsTimeoutArray = [];
-
-//~ const trigs = [
-  //~ {
-    //~ sensor: 'sensor1',
-    //~ servo: 'pump1',
-    //~ type: 'lesser',
-    //~ value: 1,
-  //~ },
-//~ ];
+var flags;
+var flagArray;
+var flagsTimeoutArray;
 
 var connection;
+
+var interval, sqlPoll, readPoll;
+
+var powerOn = true;
+var manual = false;
 
 // LOG VARs
 
@@ -86,20 +78,55 @@ var shouldSqlPoll = false;
 var shouldSetup = true;
 var shouldReadPoll = true;
 
+function initialize() {
+  sensArray = [];
+  servArray = [];
+  
+  sensInitArray = [];
+  servInitArray = [];
+  
+  trigArray = [];
+  servTimeoutArray = [];
+  
+  messageSensor = null;
+  messageServo = null;
+  
+  valArray = {};
+  valArrayServ = {};
+  
+  sensors = null;
+  servos = null;
+  triggers = null;
+  
+  sensorFields = null;
+  servoFields = null;
+  triggerFields = null;
+  
+  config = [];
+  trigs = [];
+  
+  flags = {};
+  flagArray = [];
+  flagsTimeoutArray = [];
+}
+
 // MAIN FUNCTION
 
 async function main() {
+  initialize();
+  
   connection = await mysql.createConnection({
-      host: 'localhost',
-      user: 'user',
-      password: '1234',
-      database: 'pidb'
+    host: 'localhost',
+    user: 'user',
+    password: '1234',
+    database: 'pidb'
   });
   
   await getDevices();
   
   if (shouldSetup) setup();
   
+  wsApp();
 };
 
 async function getSensors() {
@@ -148,10 +175,55 @@ async function getDevices() {
   });
 }
 
+main();
+
 function setup() {
   // READ CONFIG, INIT SENSOR SERVO TRIGGER
-  
+  setupSensor();
+  setupServo();
+  setupTrigger();
+}
 
+function setupTrigger() {
+  for (let i = 0; i < trigs.length; i += 1) {
+    flags[trigs[i].servo][trigs[i].sensor] = false;
+    trigArray.push(setInterval(() => {
+      let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
+      if (pollLog) {
+        console.log('trigger', servoIndex);
+      };
+      if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null) {
+        if (trigs[i].type === 'bigger') {
+          if (valArray[trigs[i].sensor] > trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
+          else flags[trigs[i].servo][trigs[i].sensor] = false;
+        } else if (trigs[i].type === 'lesser') {
+          if (valArray[trigs[i].sensor] < trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
+          else flags[trigs[i].servo][trigs[i].sensor] = false;
+        }
+      }
+    }, trigs[i].intv));
+  }
+}
+
+function setupServo() {
+  servos.forEach((item) => {
+    flags[item.name] = [];
+    flagsTimeoutArray[item.name] = [];
+    flagArray.push(setInterval(() => {
+      if (flagLog) console.log('flag interval', flags[item.name]);
+      let servoIndex = servArray.findIndex((serv) => serv.name === item.name);
+      if (Object.keys(flags[item.name]).length > 0 && Object.entries(flags[item.name]).findIndex(([key, value]) => value == false) == -1) {
+        if (flagLog) console.log('flag on');
+        switchServo(servoIndex, 'on');
+      } else {
+        if (flagLog) console.log('flag off');
+        switchServo(servoIndex, 'off');
+      };
+    }, item.intv));
+  })
+}
+
+function setupSensor() {
   for (let i = 0; i < config.length; i += 1) {
     console.log('comp', config[i]);
     if (config[i].mode === 'input') {
@@ -174,47 +246,7 @@ function setup() {
       };
     };
   }
-  
-  servos.forEach((item) => {
-    flags[item.name] = [];
-    flagsTimeoutArray[item.name] = [];
-    flagArray.push(setInterval(() => {
-      if (flagLog) console.log('flag interval', flags[item.name]);
-      let servoIndex = servArray.findIndex((serv) => serv.name === item.name);
-      if (Object.keys(flags[item.name]).length > 0 && Object.entries(flags[item.name]).findIndex(([key, value]) => value == false) == -1) {
-        if (flagLog) console.log('flag on');
-        switchServo(servoIndex, 'on');
-      } else {
-        if (flagLog) console.log('flag off');
-        switchServo(servoIndex, 'off');
-      };
-    }, item.intv));
-  })
-  
-  for (let i = 0; i < trigs.length; i += 1) {
-    flags[trigs[i].servo][trigs[i].sensor] = false;
-    trigArray.push(setInterval(() => {
-      let servoIndex = servArray.findIndex((item) => item.name === trigs[i].servo);
-      if (pollLog) {
-        console.log('trigger', servoIndex);
-      };
-      if (valArray[trigs[i].sensor] !== null && valArrayServ[trigs[i].servo] !== null) {
-        if (trigs[i].type === 'bigger') {
-          if (valArray[trigs[i].sensor] > trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
-          else flags[trigs[i].servo][trigs[i].sensor] = false;
-        } else if (trigs[i].type === 'lesser') {
-          if (valArray[trigs[i].sensor] < trigs[i].value) flags[trigs[i].servo][trigs[i].sensor] = true;
-          else flags[trigs[i].servo][trigs[i].sensor] = false;
-        }
-      }
-    }, trigs[i].intv));
-  }
-  
-  //~ console.log('setup flags', flags);
-  //~ console.log('setup flagsTimeoutArray', flagsTimeoutArray);
 }
-
-main();
 
 // FUNCTIONS
 
@@ -236,67 +268,8 @@ function switchServo(servoIdx, cond) {
   }
 }
 
-var readPoll = setInterval(() => {
-  if (shouldReadPoll) {
-    for (let i = 0; i < sensArray.length; i++) {
-      sensInitArray[i].read((err, value) => {
-        if (err) {
-          throw err;
-        }
-        
-        valArray[sensArray[i].name] = value;
-      });
-    };
-    for (let i = 0; i < servArray.length; i++) {
-      servInitArray[i].read((err, value) => {
-        if (err) {
-          throw err;
-        }
-        
-        valArrayServ[servArray[i].name] = value;
-      });
-    };
-    messageSensor = valArray;
-    messageServo = valArrayServ;
-    if (pollLog) {
-      console.log('message', JSON.stringify(messageSensor));
-      console.log('messageServ', JSON.stringify(messageServo));
-      //~ console.log('servtimeout', servTimeoutArray);
-    };
-  }
-  //sendMessage();
-}, 3000);
-
-var sqlPoll = setInterval(() => {
-  if (pollLog) {
-    console.log('sqopoll val array', Object.entries(valArray));
-  };
-  if (shouldSqlPoll) {
-    let tempArr = valArray;
-    for (const [key, value] of Object.entries(tempArr)) {
-      //~ console.log('sql poll', key, value);
-      if (value == null || key == null) continue;
-      //~ console.log('continued');
-      try {
-        let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
-        connection.query(q, [key, value], function (err, result) {
-          if (err) throw err;
-          //~ console.log('record inserted');
-        });
-      }
-      catch (err) {
-        console.log('error insert');
-      }
-    };
-  };
-}, 3000);
-
-//setTimeout(() => {
-  //servInitArray[0].writeSync(0);
-//}, 10000);
-
-app.get("/api", (req, res) => {
-  res.json({ message: "Hello from server!" });
+app.get("/power", (req, res) => {
+  res.json({ powerOn: powerOn });
 });
 
 app.get("/sensor", (req, res) => {
@@ -359,7 +332,22 @@ app.get("/sensor/:id", (req, res) => {
     console.log('getted');
     res.send(result);
   }).catch(err => {
-    console.log('error sensor delete', err);
+    console.log('error sensor history', err);
+    res.status(500).send(err);
+  }).finally(() => {
+    res.end();
+  });
+});
+
+app.get("/servo/:id", (req, res) => {
+  console.log('get servo history');
+  //~ let q = "SELECT name from sensors WHERE id=?";
+  let q = "SELECT servo_log.name, value, time from (SELECT name FROM servos WHERE id LIKE ?) C JOIN servo_log ON C.name=servo_log.name";
+  connection.execute(q, [req.params.id]).then(function (result) {
+    console.log('getted');
+    res.send(result);
+  }).catch(err => {
+    console.log('error servo history', err);
     res.status(500).send(err);
   }).finally(() => {
     res.end();
@@ -465,10 +453,207 @@ app.delete("/trigger/:id", (req, res) => {
   });
 });
 
+app.post("/turn-on", (req, res) => {
+  if (!powerOn) {
+    if (manual) {
+      manual = false;
+    
+      for (let i = 0; i < sensInitArray.length; i++) {
+        sensInitArray[i].unexport();
+      };
+      for (let i = 0; i < servInitArray.length; i++) {
+        if (servArray[i].init === 'high') {
+          servInitArray[i].writeSync(1);
+        } else {
+          servInitArray[i].writeSync(0);
+        };
+        servInitArray[i].unexport();
+      };  
+    }
+    console.log('turn on');
+    powerOn = true;
+    main(); 
+  }
+  res.send('Success');
+  res.end();
+});
+
+app.post("/turn-off", (req, res) => {
+  if (powerOn) {
+    console.log('turn off');
+    powerOn = false;
+    cleanup();
+  }
+  res.send('Success');
+  res.end();
+});
+
+app.post("/manual-on", (req, res) => {
+  if (!powerOn && !manual) {
+    console.log('manual on');
+    manual = true;
+    sensInitArray = []
+    servInitArray = []
+    setupSensor();
+  }
+  res.send('Success');
+  res.end();
+});
+
+app.post("/manual-off", (req, res) => {
+  if (!powerOn && manual) {
+    console.log('manual off');
+    manual = false;
+    
+    for (let i = 0; i < sensInitArray.length; i++) {
+      sensInitArray[i].unexport();
+    };
+    //~ console.log(JSON.stringify(servArray));
+    //~ console.log(JSON.stringify(sensArray));
+    for (let i = 0; i < servInitArray.length; i++) {
+      if (servArray[i].init === 'high') {
+        servInitArray[i].writeSync(1);
+      } else {
+        servInitArray[i].writeSync(0);
+      };
+      servInitArray[i].unexport();
+    };
+  }
+  res.send('Success');
+  res.end();
+});
+
+app.post("/servo-on", (req, res) => {
+  if (!powerOn && manual) {
+    console.log('servo on');
+    //~ req.body.sensor
+    switchServo(servArray.findIndex(item => item.name === req.body.name), 'on')
+  }
+  res.send('Success');
+  res.end();
+});
+
+app.post("/servo-off", (req, res) => {
+  if (!powerOn && manual) {
+    console.log('servo off');
+    //~ req.body.sensor
+    switchServo(servArray.findIndex(item => item.name === req.body.name), 'off')
+  }
+  res.send('Success');
+  res.end();
+});
+
 server.listen(PORT, () => {
   console.log(`Server listening on ${PORT}`);
-  console.log(servInitArray);
+  //~ console.log(servInitArray);
 });
+
+function wsApp() {
+  readPoll = setInterval(() => {
+    if (shouldReadPoll) {
+      for (let i = 0; i < sensArray.length; i++) {
+        sensInitArray[i].read((err, value) => {
+          if (err) {
+            throw err;
+          }
+          
+          valArray[sensArray[i].name] = value;
+        });
+      };
+      for (let i = 0; i < servArray.length; i++) {
+        servInitArray[i].read((err, value) => {
+          if (err) {
+            throw err;
+          }
+          
+          valArrayServ[servArray[i].name] = value;
+        });
+      };
+      messageSensor = valArray;
+      messageServo = valArrayServ;
+      if (pollLog) {
+        console.log('message', JSON.stringify(messageSensor));
+        console.log('messageServ', JSON.stringify(messageServo));
+        //~ console.log('servtimeout', servTimeoutArray);
+      };
+    }
+    //sendMessage();
+  }, 3000);
+  
+  sqlPoll = setInterval(() => {
+    if (pollLog) {
+      console.log('sqopoll val array', Object.entries(valArray));
+    };
+    if (shouldSqlPoll) {
+      let tempArr = valArray;
+      for (const [key, value] of Object.entries(tempArr)) {
+        //~ console.log('sql poll', key, value);
+        if (value == null || key == null) continue;
+        //~ console.log('continued');
+        try {
+          let q = "INSERT INTO sensor_log (name, value) VALUES (?, ?)";
+          connection.query(q, [key, value], function (err, result) {
+            if (err) throw err;
+            //~ console.log('record inserted');
+          });
+        }
+        catch (err) {
+          console.log('error insert');
+        }
+      };
+      let tempServ = valArrayServ;
+      for (const [key, value] of Object.entries(tempServ)) {
+        //~ console.log('sql poll', key, value);
+        if (value == null || key == null) continue;
+        //~ console.log('continued');
+        try {
+          let q = "INSERT INTO servo_log (name, value) VALUES (?, ?)";
+          connection.query(q, [key, value], function (err, result) {
+            if (err) throw err;
+            //~ console.log('record inserted');
+          });
+        }
+        catch (err) {
+          console.log('error insert');
+        }
+      };
+    };
+  }, 3000);
+
+  wss.on('connection', function connection(ws) {
+    ws.on('message', function incoming(msg) {
+      if (messageLog) console.log('received: %s', msg);
+      if (msg === 'sensor') {
+        ws.send(JSON.stringify(messageSensor));
+      } else if (msg === 'servo') {
+        ws.send(JSON.stringify(messageServo));
+      } else if (msg === 'all') {
+        ws.send(JSON.stringify({sensor: {...messageSensor},servo: {...messageServo}}));
+      }
+    });
+    //eventEmitter.on('send-message', (msg) => ws.send(JSON.stringify(msg)));
+    //ws.send('something');
+    //~ console.log('wss connection');
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+    ws.on('close', () => console.log('wson close'));
+  });
+  
+  interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+      if (ws.isAlive === false) {console.log('terminate'); return ws.terminate();}
+      
+      ws.isAlive = false;
+      ws.ping(noop);
+    });
+  }, 10000);
+  
+  wss.on('close', function close() {
+    clearInterval(interval);
+    console.log('wss close');
+  });
+}
+
 
 function noop() {};
 
@@ -477,41 +662,7 @@ function heartbeat() {
   this.isAlive = true;
 };
 
-wss.on('connection', function connection(ws) {
-  ws.on('message', function incoming(msg) {
-    if (messageLog) console.log('received: %s', msg);
-    if (msg === 'sensor') {
-      ws.send(JSON.stringify(messageSensor));
-    } else if (msg === 'servo') {
-      ws.send(JSON.stringify(messageServo));
-    } else if (msg === 'all') {
-      ws.send(JSON.stringify({sensor: {...messageSensor},servo: {...messageServo}}));
-    }
-  });
-  //eventEmitter.on('send-message', (msg) => ws.send(JSON.stringify(msg)));
-  //ws.send('something');
-  //~ console.log('wss connection');
-  ws.isAlive = true;
-  ws.on('pong', heartbeat);
-  ws.on('close', () => console.log('wson close'));
-});
-
-const interval = setInterval(function ping() {
-  wss.clients.forEach(function each(ws) {
-    if (ws.isAlive === false) {console.log('terminate'); return ws.terminate();}
-    
-    ws.isAlive = false;
-    ws.ping(noop);
-  });
-}, 10000);
-
-wss.on('close', function close() {
-  clearInterval(interval);
-  console.log('wss close');
-});
-
-
-process.on('SIGINT', _ => {
+function cleanup() {
   clearInterval(readPoll);
   clearInterval(sqlPoll);
   clearInterval(interval);
@@ -551,6 +702,24 @@ process.on('SIGINT', _ => {
   wss.clients.forEach(function each(ws) {
     ws.close();
   });
+  //~ server.close();
+}
+
+process.on('SIGINT', _ => {
+  if (powerOn) cleanup()
+  if (manual) {
+    for (let i = 0; i < sensInitArray.length; i++) {
+      sensInitArray[i].unexport();
+    };
+    for (let i = 0; i < servInitArray.length; i++) {
+      if (servArray[i].init === 'high') {
+        servInitArray[i].writeSync(1);
+      } else {
+        servInitArray[i].writeSync(0);
+      };
+      servInitArray[i].unexport();
+    };
+  }
   server.close();
 });
   
