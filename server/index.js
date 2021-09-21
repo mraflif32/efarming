@@ -65,7 +65,7 @@ var connection;
 
 // LOG VARs
 
-var pollLog = true;
+var pollLog = false;
 var shouldSqlPoll = false;
 
 // MAIN FUNCTION
@@ -82,73 +82,65 @@ async function main() {
   //~ const [servos, servoFields] = await connection.execute('SELECT * FROM servos');
   //~ const [triggers, triggerFields] = await connection.execute('SELECT * FROM triggers');
   
-  const sensors = [
-    {
-      name: 'sensor',
+  var sensors = [];
+  
+  var servos = [];
+  
+  var triggers = [];
+  
+  /////////////
+  /////////////
+  /////////////
+  /////////////
+  const numb = 50000;
+  /////////////
+  /////////////
+  /////////////
+  /////////////
+  
+  for (let i = 0; i < numb; i++) {
+    sensors.push({
+      name: 'sensor' + i,
       type: 'moist',
       pin: 17,
-    },
-    {
-      name: 'sensor',
-      type: 'moist',
-      pin: 27,
-    },
-    //~ {
-      //~ name: 'sensor',
-      //~ type: 'moist',
-      //~ pin: 17,
-    //~ },
-    //~ {
-      //~ name: 'sensor',
-      //~ type: 'moist',
-      //~ pin: 17,
-    //~ },
-    //~ {
-      //~ name: 'sensor',
-      //~ type: 'moist',
-      //~ pin: 17,
-    //~ },
-  ];
+    })
+  }
   
-  const servos = [
-    {
-      name: 'pump1',
+  for (let i = 0; i < numb; i++) {
+    servos.push({
+      name: 'pump' + i,
       init: 1,
       pin: 22,
-    },
-    //~ {
-      //~ name: 'pump2',
-      //~ init: 1,
-      //~ pin: 22,
-    //~ },
-    //~ {
-      //~ name: 'pump3',
-      //~ init: 1,
-      //~ pin: 22,
-    //~ },
-    //~ {
-      //~ name: 'pump4',
-      //~ init: 1,
-      //~ pin: 22,
-    //~ },
-  ];
+    })
+  }
   
-  const triggers = [
-    {
-      sensor: 'sensor1',
-      servo: 'pump1',
+  for (let i = 0; i < numb; i++) {
+    triggers.push({
+      sensor: 'sensor' + i,
+      servo: 'pump' + i,
       type: 'lesser',
       value: 1,
       intv: 5000,
       duration: 10000,
-    },
-  ];
+    })
+  }
+  
+  //~ const triggers = [
+    //~ {
+      //~ sensor: 'sensor1',
+      //~ servo: 'pump1',
+      //~ type: 'lesser',
+      //~ value: 1,
+      //~ intv: 5000,
+      //~ duration: 10000,
+    //~ },
+  //~ ];
   
   //~ console.log('sensors', sensors);
   //~ console.log('servos', servos);
   
   sensors.forEach((item) => {
-    console.log('sensor item', item);
+    //~ console.log('sensor item', item);
     config.push({
       name: item.name,
       mode: 'input',
@@ -157,7 +149,7 @@ async function main() {
   });
   
   servos.forEach((item) => {
-    console.log('servo item', item);
+    //~ console.log('servo item', item);
     config.push({
       name: item.name,
       mode: 'output',
@@ -167,7 +159,7 @@ async function main() {
   });
   
   triggers.forEach((item) => {
-    console.log('trigger item', item);
+    //~ console.log('trigger item', item);
     trigs.push(item);
   });
 
@@ -176,7 +168,7 @@ async function main() {
   
   
   for (let i = 0; i < config.length; i += 1) {
-    console.log('comp', config[i]);
+    //~ console.log('comp', config[i]);
     if (config[i].mode === 'input') {
       let confName = `${config[i].name}${i + 1}`;
       sensArray.push({
@@ -248,7 +240,7 @@ function switchServo(servoIdx, cond) {
 }
 
 var readPoll = setInterval(() => {
-  console.time('Execution Time');
+  console.time('Polling Time');
   for (let i = 0; i < sensArray.length; i++) {
     sensInitArray[i].read((err, value) => {
       if (err) {
@@ -269,7 +261,7 @@ var readPoll = setInterval(() => {
   };
   messageSensor = valArray;
   messageServo = valArrayServ;
-  console.timeEnd('Execution Time');
+  console.timeEnd('Polling Time');
   if (pollLog) {
     console.log('message', JSON.stringify(messageSensor));
     console.log('messageServ', JSON.stringify(messageServo));
@@ -411,10 +403,10 @@ process.on('SIGINT', _ => {
   for (const timeout in servTimeoutArray) {
     if (timeout) clearTimeout(timeout);
   };
-  for (let i = 0; i < sensInitArray.length; i++) {
+  for (let i = 0; i < 1; i++) {
     sensInitArray[i].unexport();
   };
-  for (let i = 0; i < servInitArray.length; i++) {
+  for (let i = 0; i < 1; i++) {
     if (servArray[i].init === 'high') {
       servInitArray[i].writeSync(1);
     } else {
